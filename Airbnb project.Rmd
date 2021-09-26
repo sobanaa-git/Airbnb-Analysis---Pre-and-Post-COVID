@@ -1,0 +1,296 @@
+---
+title: "Airbnb project"
+author: "Sobanaa Jayakumar"
+date: "9/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cluster)
+library(textshape)
+library(factoextra)
+library(arules)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+```{r Airbnb clustering}
+#Install package textshape,Cluster, 
+
+bnb <- column_to_rownames(bnb,1)
+head(bnb)
+
+
+#Start here
+bnb[is.na(bnb)] <- 0
+head(bnb)
+bnb <-  bnb [, -1]
+head(bnb)
+bnb.norm <- scale(bnb)
+head(bnb.norm) #Hornet 1.04 Sd above avg displacement (How many SD from mean)
+
+#k means clustering
+set.seed(12345)
+bnb.kmclusters <- kmeans(bnb.norm, 9 , nstart = 10)
+
+unscale(bnb.kmclusters$centers, bnb.norm) 
+
+bnb.kmclusters$size 
+
+distances <- dist(bnb.norm, method="euclidean")
+bnb.hclusters <- hclust(distances, method="centroid")
+
+# See online documentation for the hclust function for additional ways to handle distances between clusters
+
+# We will need the ggdendro package to get a good display of the dendrogram
+# The following command creates a dendrogram
+# Set labels to FALSE if you do not want the labels for each data point to appear
+ggdendrogram(bnb.hclusters, labels=TRUE)
+
+#Package factoextra
+fviz_cluster(bnb.kmclusters, data = bnb.norm)
+fviz_cluster
+
+
+
+#Gap method
+
+set.seed(12345)
+gaps <- clusGap(bnb.norm, kmeans, 90, d.power = 2) #maximum clusters we want is 10. going to see k = 1,2,..10 (sqrt(n))
+maxSE(gaps$Tab[,"gap"], gaps$Tab[,"SE.sim"], "Tibs2001SEmax")
+plot(gaps$Tab[,"gap"])
+?gaps
+
+```
+
+
+```{r Association rules}
+#Package tidyverse
+samp_19_availability_30_mean  = mean(samp_19$availability_30)
+samp_19_availability_30
+samp_19 <-  samp_19 %>% mutate(availability = ifelse(availability_30  > samp_19_availability_30_mean, 0, 1))
+head(samp_19)
+
+samp_19_rating_mean  = mean(samp_19$review_scores_rating)
+samp_19_rating_mean
+samp_19 <-  samp_19 %>% mutate(score_rating = ifelse(review_scores_rating  < samp_19_rating_mean, 0, 1))
+head(samp_19)
+
+rooms <- model.matrix(~room_type-1, data=samp_19)
+head(rooms)
+
+samp_19$Entire <- rooms[,1]
+samp_19$Hotel <- rooms[,2]
+samp_19$Private <- rooms[,3]
+samp_19$Shared <- rooms[,4]
+head(samp_19)
+samp_19 <-  samp_19[, -3]
+samp_19 <-  samp_19[, -2]
+head(samp_19)
+samp_19.binary <- samp_19 > 0.5
+head(samp_19.binary)
+rules <- apriori(samp_19.binary, parameter = list(supp=0.01, conf=0.01))
+inspect(rules)
+rules.sorted <- sort(rules, by="lift")
+inspect(rules.sorted)
+rules.sorted <- sort(rules, by="confidence")
+inspect(rules.sorted)
+rules.sorted <- rules[order(labels(lhs(rules)))]
+rules.sorted <- rules[order(labels(rhs(rules)))]
+
+
+
+head(samp_20)
+samp_20_availability_30_mean  = mean(samp_20$availability_30)
+samp_20_availability_30_mean
+samp_20 <-  samp_20 %>% mutate(availability = ifelse(availability_30  > samp_20_availability_30_mean, 0, 1))
+head(samp_20)
+
+samp_20_rating_mean  = mean(samp_20$review_scores_rating)
+samp_20_rating_mean
+samp_20 <-  samp_20 %>% mutate(score_rating = ifelse(review_scores_rating  < samp_20_rating_mean, 0, 1))
+head(samp_20)
+
+samp_20_price_median  = median(price, data=samp_20)
+?median.default
+samp_20_price_median
+samp_20 <-  samp_20 %>% mutate(score_rating = ifelse(review_scores_rating  < samp_20_rating_mean, 0, 1))
+head(samp_20)
+
+
+
+rooms <- model.matrix(~room_type-1, data=samp_20)
+head(rooms)
+
+samp_20$Entire <- rooms[,1]
+samp_20$Hotel <- rooms[,2]
+samp_20$Private <- rooms[,3]
+samp_20$Shared <- rooms[,4]
+head(samp_20)
+samp_20 <-  samp_20[, -3]
+samp_20 <-  samp_20[, -2]
+head(samp_20)
+samp_20.binary <- samp_20 > 0.5
+head(samp_20.binary)
+rules <- apriori(samp_20.binary, parameter = list(supp=0.01, conf=0.01))
+inspect(rules)
+rules.sorted <- sort(rules, by="lift")
+inspect(rules.sorted)
+rules.sorted <- sort(rules, by="confidence")
+inspect(rules.sorted)
+rules.sorted <- rules[order(labels(lhs(rules)))]
+rules.sorted <- rules[order(labels(rhs(rules)))]
+```
+
+
+```{r Airbnb prediction}
+
+#Data cleaning
+bnb_19[is.na(bnb_19)] <- 0
+
+bnb_19 <- as.data.frame(bnb_19)
+
+rooms <- model.matrix(~room_type-1, data=bnb_19)
+head(rooms)
+
+bnb_19$Entire <- rooms[,1] > 0.5
+bnb_19$Hotel <- rooms[,2] > 0.5
+bnb_19$Private <- rooms[,3] > 0.5
+bnb_19$Shared <- rooms[,4] > 0.5
+head(bnb_19)
+
+bnb_19 <-  bnb_19[, -2]
+bnb_19 <-  bnb_19[, -10]
+bnb_19 <-  bnb_19[, -11]
+head(bnb_19)
+
+
+head(bnb_19)
+# Set the column number that contains the outcome variable
+ycol <- 8
+
+set.seed(12345)
+training <- sample(1:nrow(bnb_19), 0.6*nrow(bnb_19))
+bnb_19.training <- bnb_19[training,-ycol]
+bnb_19.training.results <- bnb_19[training,ycol]
+bnb_19.test <- bnb_19[-training,-ycol]
+bnb_19.test.results <- bnb_19[-training,ycol]
+
+bnb_19.reg <- lm(occupied ~ ., data=bnb_19[training,])
+summary(bnb_19.reg)
+
+bnb_19.reg.predictions <- predict(bnb_19.reg,bnb_19)[-training]
+
+(mean((bnb_19.test.results-bnb_19.reg.predictions)^2))^0.5
+
+
+#KNN reg
+
+
+best.k <- -1 #best k at -1 so that it immediately gets set to 1
+RMSE <-  -1  #irrelevant
+best.RMSE <- 99999999   #to make sure we get a lower rmse (set to ridiculously high no)
+for (i in 1:80) {
+  bnb_19.knn <- knn.reg(bnb_19.training, bnb_19.test, bnb_19.training.results, k = i)
+  RMSE <- (mean((bnb_19.knn$pred - bnb_19.test.results)^2))^0.5
+  if (RMSE < best.RMSE) {
+    best.k <-  i
+    best.RMSE <-RMSE
+  }
+}
+print(paste("The optimal value of k is", best.k, "with a RMSE of", best.RMSE))
+
+bnb_19.knn <- knn.reg(bnb_19.training, bnb_19.test, bnb_19.training.results, k=34)
+(mean((bnb_19.knn$pred - bnb_19.test.results)^2))^0.5
+bnb_19.knn
+
+best.mindev <- -1
+RMSE <-  -1  
+best.RMSE <- 99999999   
+for (i in 1:100) {
+  bnb_19.tree <- tree(occupied ~ ., data = bnb_19[training,], mindev = 0.0005*i)
+  bnb_19.tree.predictions <-  predict (bnb_19.tree,bnb_19)[-training]
+  RMSE <- (mean((bnb_19.test.results-bnb_19.tree.predictions)^2))^0.5
+  if (RMSE < best.RMSE) {
+    best.mindev <- 0.0005*i
+    best.RMSE <-RMSE
+  }
+}
+print(paste("The optimal value of mindev is",best.mindev,"with a RMSE of", best.RMSE))
+
+bnb_19.tree <- tree(occupied ~ ., data=bnb_19[training,],mindev=.0015)
+bnb_19.tree.predictions <- predict(bnb_19.tree,bnb_19)[-training]
+(mean((bnb_19.test.results-bnb_19.tree.predictions)^2))^0.5
+plot(bnb_19.tree)
+text(bnb_19.tree, cex = 0.5)
+
+plot(bnb_19$occupied, bnb_19$review_scores_rating, main = "Scatterplot", xlab = "Occ", ylab = "rating")
+abline(lm(Labor ~ Percentage, data = anal), col = "red")
+
+
+bnb_19_new <- as.data.frame(bnb_19_new)
+predict(bnb_19.tree,bnb_19_new)
+
+head(bnb_19)
+
+?correlatio
+cor(bnb_19$host_response_rate, bnb_19$occupied)
+cor(bnb_19$host_is_superhost, bnb_19$occupied)
+
+
+#Reg tree
+bnb_19 <- bnb_19[,c(1,2,3,4,5,6,7,9,10,8)]
+set.seed(12345)
+
+# The following command will randomly select 60% of the row numbers in the data set to represent the training data
+training <- sample(1:nrow(bnb_19), 0.6*nrow(bnb_19))
+
+# The following line avoids having to change the code manually for data sets with different numbers of columns
+
+head(bnb_19)
+nvars <- ncol(bnb_19)
+
+# The following two commands separate the training data into two objects; one has interest rate removed, the other contains only interest rate
+bnb_19.training <- bnb_19[training,-nvars]
+bnb_19.training.results <- bnb_19[training,nvars]
+
+# The following two commands do the same for the remaining 40% of the data
+bnb_19.test <- bnb_19[-training,-nvars]
+bnb_19.test.results <- bnb_19[-training,nvars]
+
+
+rt.vars <- 7 #number of independent variables used in each tree
+rt.numtrees <- 25 #number of trees
+rt.mindev <- 0.0015
+
+rt.trees <- vector(mode="list",length=rt.numtrees) #creates the empty list of trees
+rt.predictions <- vector(mode="list",length=rt.numtrees) #creates the empty list of prediction vectors
+randomtree.predictions <- 0
+
+# The following for loop creates the trees using the Lending Club variables
+for (i in 1:rt.numtrees){
+  set.seed(12345+i) #if we used 12345 every time, we wouldn't get different subsets of variables
+  bnb_19.subset <- bnb_19[training,sample(1:(nvars-1),rt.vars)] #selects a random subset of the variables
+  bnb_19.subset[,rt.vars+1] <- bnb_19.training.results
+  names(bnb_19.subset)[rt.vars+1] = "occupied" #this is necessary for the predict function to be able to match variables correctly
+  rt.trees[[i]] <- tree(occupied ~ ., data=bnb_19.subset, mindev=rt.mindev) #include as many independent variables as are being used
+  rt.predictions[[i]] <- predict(rt.trees[[i]],bnb_19)[-training]
+  randomtree.predictions <- randomtree.predictions + rt.predictions[[i]] #Keeps a running total of the predictions of the test set
+}
+randomtree.predictions = randomtree.predictions / rt.numtrees #divides the totals by the # of trees to get the average predictions for the test set
+(mean((bnb_19.test.results-randomtree.predictions)^2))^0.5 #computes RMSE
+
+rt.predictions[[i]] <- predict(rt.trees[[i]],bnb_19_new)
+rt.predictions
+
+
+```
+
